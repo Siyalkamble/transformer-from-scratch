@@ -49,19 +49,6 @@ Goals:
 
 ---
 
-## RAG pipeline
-
-Once Stage 2 training produces a usable model, it's wrapped with retrieval:
-
-1. Small corpus embedded (sentence-level or chunk-level embeddings)
-2. Query → retrieve top-k relevant chunks
-3. Retrieved context injected into the prompt
-4. Generation conditioned on retrieved context
-
-This component exists to demonstrate the deployment-adjacent half of GenAI engineering — not just "can train a model" but "can build the retrieval + generation system around it."
-
----
-
 ## Evaluation harness
 
 A model without evaluation is a training script with extra logging. Minimum bar for this project:
