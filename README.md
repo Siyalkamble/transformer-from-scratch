@@ -127,9 +127,13 @@ This project follows a Socratic debugging protocol: before asking for outside he
 
 ## Status
 
-🚧 In progress — see commit history and `BUGS.md` for current state. Results, benchmarks, and sample generations below will be filled in as each stage completes; this README will not claim results that don't yet exist.
+🚧 Stage 0 — environment + planning. No model code written yet.
 
-### Current stage: _[fill in — e.g. "Stage 1, attention implementation"]_
+Done so far:
+- `scripts/download_data.py` — pulls TinyStories via HF `datasets`, writes train/val JSONL
+- `exploration.ipynb` — build-order notes (tokenizer → embeddings/RoPE → single attention head → ...), no implementation
+
+Not started: `model/`, `data/` tokenizers, `train.py`, `generate.py`, `rag/`, `eval/`, `BUGS.md`. The repo structure below is the target layout, not the current one — update this section as each piece lands, don't let it drift into aspirational fiction.
 
 ---
 
