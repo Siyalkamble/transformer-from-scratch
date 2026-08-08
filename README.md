@@ -78,10 +78,6 @@ transformer-from-scratch/
 │   ├── prepare.py             # tokenize + memmap dataset prep
 ├── train.py                   # training loop, checkpointing, logging
 ├── generate.py                 # sampling / inference script
-├── rag/
-│   ├── embed.py                # corpus embedding
-│   ├── retrieve.py              # top-k retrieval
-│   ├── rag_generate.py           # retrieval + generation pipeline
 ├── eval/
 │   ├── perplexity.py
 │   ├── ablations.py
