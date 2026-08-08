@@ -1,148 +1,146 @@
-# Transformer From Scratch — Anchor Project
+# transformer-from-scratch
 
-## Problem Statement
+A decoder-only, GPT-style transformer language model implemented from scratch in PyTorch (no `nn.Transformer`, no `nn.MultiheadAttention`) — trained CPU-only, extended with a RAG pipeline, and validated with a proper evaluation harness (perplexity, ablations, generation quality).
 
-Build a decoder-only (GPT-style) autoregressive language model from scratch in PyTorch, train it on a small text corpus on CPU, and be able to defend every tensor shape and design decision in the forward pass without looking at the code.
-
-**Formal definition:**
-Given a sequence of tokens `x_1, x_2, ..., x_T`, learn a model `P(x_t | x_1, ..., x_{t-1})` — the probability distribution over the next token conditioned only on preceding tokens (causal/autoregressive). Train via next-token cross-entropy loss (teacher forcing) and generate new sequences via sampling at inference time.
-
-**Constraints:**
-- No pre-built attention/transformer layers (`nn.MultiheadAttention`, `nn.TransformerEncoderLayer`, etc. are NOT allowed)
-- `nn.Linear`, `nn.LayerNorm`, `nn.Embedding`, `nn.Dropout` ARE allowed as primitives — attention math, masking, multi-head split/concat, and the transformer block itself must be hand-implemented
-- Must run and be debuggable on CPU (8GB RAM laptop) for development; GPU (Colab) used only for the final scaled-up training run, not for dev/debug
-- No reference implementation (e.g. nanoGPT) consulted until Phase 5 passes
-
-**Definition of done:**
-1. Model overfits a single small batch to near-zero loss (sanity check)
-2. Model trains on a real (small) dataset with visibly decreasing loss
-3. Model generates non-garbage text via sampling (greedy → temperature → top-k/top-p)
-4. Every phase has at least one entry in `BUGS.md` demonstrating independent diagnosis
-5. RoPE swapped in for sinusoidal positional encoding, with an A/B comparison
-6. Repo is clean: modular `.py` files, not a notebook dump
+This is not a "call a pretrained model" project. Every core component — attention, positional encoding, the training loop — is hand-implemented to demonstrate architecture-level understanding, not API fluency.
 
 ---
 
-## Architecture Blueprint
+## Why this project exists
 
-```
-Input tokens (B, T)
-    │
-    ▼
-Token Embedding (vocab_size, d_model)  +  Positional Encoding
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  Transformer Block (× N layers)      │
-│  ┌─────────────────────────────┐    │
-│  │ LayerNorm (pre-LN)          │    │
-│  │        │                    │    │
-│  │        ▼                    │    │
-│  │ Masked Multi-Head Attention │    │
-│  │        │                    │    │
-│  │        ▼                    │    │
-│  │ Residual Add ────────────┐  │    │
-│  │        │                 │  │    │
-│  │        ▼                 │  │    │
-│  │ LayerNorm (pre-LN)        │  │    │
-│  │        │                  │  │    │
-│  │        ▼                  │  │    │
-│  │ FeedForward (4x expand,   │  │    │
-│  │ GELU, dropout)            │  │    │
-│  │        │                  │  │    │
-│  │        ▼                  │  │    │
-│  │ Residual Add ──────────────┘ │    │
-│  └─────────────────────────────┘    │
-└─────────────────────────────────────┘
-    │
-    ▼
-Final LayerNorm
-    │
-    ▼
-Linear Head (tied to embedding weights) → vocab logits
-    │
-    ▼
-Softmax → next-token distribution
-```
+Most self-taught ML portfolios show "I fine-tuned/called an LLM." This project instead answers: *do I actually understand what's inside the model I'm calling?*
+
+Goals:
+- Implement the GPT-2-style decoder-only transformer architecture from first principles
+- Train it under real hardware constraints (8GB RAM, CPU-only) using memory-efficient data loading
+- Wrap the trained model in a retrieval-augmented generation (RAG) pipeline
+- Evaluate rigorously — not just "the loss went down," but perplexity, ablations, and a documented generation rubric
 
 ---
 
-## Phase-by-Phase Blueprint
+## Architecture
 
-### Phase 0 — Primitives & Data Pipeline
-- Confirm shape fluency: `nn.Linear`, `nn.LayerNorm`, `nn.Embedding` (predict shapes on paper before running)
-- Build char-level tokenizer (skip BPE — don't learn two new things at once)
-- Build `Dataset`/batching: input `x`, target `y` = `x` shifted by 1 token
-- **Gate to pass:** predict every tensor shape in the primitives snippet without running code
+| Component | Choice | Why |
+|---|---|---|
+| Model type | Decoder-only (GPT-style) | Standard for autoregressive LM / causal generation |
+| Normalization | Pre-LayerNorm | GPT-2 convention; more stable training than post-LN |
+| Positional encoding | RoPE (Rotary Position Embedding) | Current standard in modern LLMs (LLaMA, Mistral, etc.), applied at every attention layer |
+| Attention | Custom scaled dot-product multi-head attention | Written from scratch — Q/K/V projections, `-inf` masking pre-softmax, head split/merge |
+| Framework | PyTorch 2.13.0+cpu | No GPU available; CPU-only by design constraint |
+| Tokenization | Char-level (Stage 1) → BPE (Stage 2) | Progressive complexity — correctness first, then scale |
 
-### Phase 1 — Single Attention Head
-- Scaled dot-product attention, one head, no batching complexity
-- Causal mask applied before softmax
-- Test in isolation with tiny hand-computable tensors, print every intermediate shape
-- **Gate to pass:** can explain why divide by `sqrt(d_k)`, and what the causal mask blocks and why
-
-### Phase 2 — Multi-Head Attention
-- Split into heads `(B, nh, T, hs)`, run attention per head, concatenate, project through `W_O`
-- **Known trap:** incorrect reshape when splitting/merging heads
-- *(Optional checkpoint with mentor here if going fully blind proves too costly — verify shapes only, not implementation)*
-
-### Phase 3 — Full Transformer Block
-- Attention + residual + pre-LN LayerNorm
-- FFN (4x expansion, GELU) + residual + pre-LN LayerNorm
-- Dropout included (previously flagged gap — do not skip)
-- Mini overfit check on this block alone before moving on
-
-### Phase 4 — Stack Blocks + Positional Encoding
-- Start with sinusoidal or learned absolute positional embeddings (not RoPE yet)
-- Stack N transformer blocks
-- **Gate to pass:** full forward pass runs end-to-end without shape errors
-
-### Phase 5 — Sanity Check (non-negotiable)
-- Overfit one tiny batch (1–2 examples) until loss → near zero
-- If this doesn't pass, architecture is broken — do not proceed
-- This is where independent debugging matters most — no reference code, no shortcuts
-
-### Phase 6 — Real Training Loop
-- AdamW, LR warmup + cosine decay, gradient clipping, checkpointing
-- Train on small corpus (Tiny Shakespeare acceptable for this phase only — not the final portfolio dataset)
-- Scale up and run full training on Colab GPU using the already-debugged local code
-
-### Phase 7 — Generation
-- Greedy decoding → temperature sampling → top-k / top-p sampling
-
-### Phase 8 — Extensions (differentiation from generic tutorial clones)
-- Swap sinusoidal → RoPE, A/B compare
-- KV-cache for faster inference
+**Explicitly not used:** `torch.nn.Transformer`, `torch.nn.MultiheadAttention`, any pretrained backbone.
 
 ---
 
-## Repo Structure
+## Two-stage build plan
+
+### Stage 1 — Correctness baseline (char-level)
+- Tiny dataset, character-level tokenizer, small model
+- Goal: prove the architecture is *correct*, not good
+- Sanity checks: overfit a single tiny batch to near-zero loss, no NaNs, monotonic loss decrease
+- This stage exists to catch bugs in attention/masking/RoPE before scaling up
+
+### Stage 2 — Real training (BPE + TinyStories)
+- Dataset: [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) (roneneldan/TinyStories)
+- Byte-Pair Encoding tokenizer
+- Data loaded via `np.memmap` — full tokenized dataset is not loaded into RAM at once (required at 8GB RAM)
+- Goal: a model that generates coherent short children's-story-style text
+
+---
+
+## RAG pipeline
+
+Once Stage 2 training produces a usable model, it's wrapped with retrieval:
+
+1. Small corpus embedded (sentence-level or chunk-level embeddings)
+2. Query → retrieve top-k relevant chunks
+3. Retrieved context injected into the prompt
+4. Generation conditioned on retrieved context
+
+This component exists to demonstrate the deployment-adjacent half of GenAI engineering — not just "can train a model" but "can build the retrieval + generation system around it."
+
+---
+
+## Evaluation harness
+
+A model without evaluation is a training script with extra logging. Minimum bar for this project:
+
+- **Perplexity** on a held-out TinyStories validation split
+- **Train vs val loss curves**, logged and plotted (not eyeballed)
+- **Qualitative generation evaluation** — fixed prompt set, sampled across temperature/top-k settings, scored against a written rubric (not "it looks good")
+- **Ablation study** — at minimum one of: RoPE vs no positional encoding, or pre-LN vs post-LN, with loss/perplexity comparison
+- **RAG evaluation** — retrieval-augmented output compared against no-retrieval baseline on relevance, not assumed to help by default
+
+Results go in [`eval/RESULTS.md`](eval/RESULTS.md) once available — training curves, perplexity numbers, ablation tables, and sample generations at different sampling settings.
+
+---
+
+## Repo structure
 
 ```
 transformer-from-scratch/
-├── README.md
-├── BUGS.md
-├── data.py           # tokenizer, Dataset, batching
-├── model.py          # attention, MHA, transformer block, full model
-├── train.py          # training loop, optimizer, scheduler
-├── generate.py        # sampling strategies
-├── configs/
-│   └── toy_config.py # tiny debug config (d_model=8, n_heads=2, n_layers=1)
-└── checkpoints/
+├── model/
+│   ├── attention.py        # multi-head scaled dot-product attention (from scratch)
+│   ├── rope.py              # rotary positional embedding
+│   ├── block.py              # transformer block (pre-LN, attention + MLP)
+│   ├── gpt.py                # full model assembly
+├── data/
+│   ├── char_tokenizer.py     # Stage 1 tokenizer
+│   ├── bpe_tokenizer.py       # Stage 2 tokenizer
+│   ├── prepare.py             # tokenize + memmap dataset prep
+├── train.py                   # training loop, checkpointing, logging
+├── generate.py                 # sampling / inference script
+├── rag/
+│   ├── embed.py                # corpus embedding
+│   ├── retrieve.py              # top-k retrieval
+│   ├── rag_generate.py           # retrieval + generation pipeline
+├── eval/
+│   ├── perplexity.py
+│   ├── ablations.py
+│   ├── generation_rubric.md
+│   └── RESULTS.md               # filled in as results come in — not fabricated ahead of time
+├── BUGS.md                       # debugging log (see below)
+└── README.md
 ```
 
 ---
 
-## Debugging Protocol (applies to every phase)
+## Debugging protocol (`BUGS.md`)
 
-1. Shape assertions on every forward pass, written before running the code
-2. Test every component in isolation with tiny, hand-computable inputs before integrating
-3. Mini overfit-check after each major component, not just at Phase 5
-4. Time-box: 45 minutes stuck on the same bug → write a bug report entry, then move on
-5. Bug report format (in `BUGS.md`): expected vs. actual, what's been ruled out, relevant code — written *before* asking for outside help
+This project follows a Socratic debugging protocol: before asking for outside help on a bug, 45 minutes of independent debugging is time-boxed, followed by a written bug report covering:
+- Expected behavior
+- Actual behavior
+- Causes ruled out so far
 
-## Rules of Engagement (self-imposed)
+`BUGS.md` logs this process. It's kept intentionally, not cleaned up — the debugging trail is part of what this project demonstrates.
 
-- No nanoGPT or reference code consulted until Phase 5 passes
-- Any AI/mentor help before Phase 5 is Socratic (diagnostic questions only) — not code fixes
-- Dev and debug on CPU locally with the toy config; GPU used only for the scaled final run in Phase 6
+---
+
+## Hardware / environment constraints
+
+- 8GB RAM, CPU-only training (CachyOS, Fish shell, `uv` package manager)
+- No GPU — batch size, model size, and dataset loading are all constrained by this and documented as deliberate trade-offs, not oversights
+- `torch` installed via `--index-url https://download.pytorch.org/whl/cpu`
+
+---
+
+## Status
+
+🚧 In progress — see commit history and `BUGS.md` for current state. Results, benchmarks, and sample generations below will be filled in as each stage completes; this README will not claim results that don't yet exist.
+
+### Current stage: _[fill in — e.g. "Stage 1, attention implementation"]_
+
+---
+
+## Reference (not copied from)
+
+[Karpathy's nanoGPT](https://github.com/karpathy/nanoGPT) is used as a correctness oracle to sanity-check architectural decisions — not as source code. All implementation here is original.
+
+---
+
+## Limitations (stated upfront, not discovered in an interview)
+
+- Small model, small dataset, CPU-only — this is a correctness/understanding demonstration, not a competitive language model
+- TinyStories is a simple, narrow-domain dataset by design — chosen for feasibility on constrained hardware, not because it represents general-purpose LM capability
+- RAG corpus is small-scale — demonstrates the pipeline mechanics, not production-scale retrieval
