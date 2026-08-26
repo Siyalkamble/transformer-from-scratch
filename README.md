@@ -101,6 +101,7 @@ transformer-from-scratch/
 │   ├── generation_rubric.md
 │   └── RESULTS.md               # filled in as results come in — not fabricated ahead of time
 ├── BUGS.md                       # debugging log (see below)
+├── Ablations.md                 # one entry per ablation, hypothesis written BEFORE the run
 └── README.md
 ```
 

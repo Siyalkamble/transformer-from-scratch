@@ -1,4 +1,5 @@
-data/
+data/*
+!data/*.py
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
 __pycache__/
@@ -6,3 +7,5 @@ __pycache__/
 .venv/
 venv/
 .env
+.vscode/
+.agents/
