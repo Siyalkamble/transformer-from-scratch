@@ -23,9 +23,12 @@ tok = CharTokenizer(text)
 emb = nn.Embedding(tok.vocab_size, 32)
 sample = torch.tensor(tok.encode(text[:50]))
 out = emb(sample)
+print(tok.vocab_size) # 65
 print(out.shape)  
 
-tok = CharTokenizer(text)
+token_ids = torch.tensor(tok.encode(text), dtype=torch.long)
+print(token_ids[:100])
+
 test_str = "hello world"
 assert tok.decode(tok.encode(test_str)) == test_str
 print("round-trip passed")
