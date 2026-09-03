@@ -4,6 +4,12 @@ A decoder-only, GPT-style transformer language model implemented from scratch in
 
 This is not a "call a pretrained model" project. Every core component — attention, positional encoding, the training loop — is hand-implemented to demonstrate architecture-level understanding, not API fluency.
 
+
+
+## Architecture
+
+   ![Decoder attention pipeline](docs/decoder_attention_pipeline.svg)
+
 ---
 
 ## Why this project exists
@@ -11,6 +17,7 @@ This is not a "call a pretrained model" project. Every core component — attent
 Most self-taught ML portfolios show "I fine-tuned/called an LLM." This project instead answers: *do I actually understand what's inside the model I'm calling?*
 
 Goals:
+
 - Implement the GPT-2-style decoder-only transformer architecture from first principles
 - Train it under real hardware constraints (8GB RAM, CPU-only) using memory-efficient data loading
 - Wrap the trained model in a retrieval-augmented generation (RAG) pipeline
@@ -20,14 +27,14 @@ Goals:
 
 ## Architecture
 
-| Component | Choice | Why |
-|---|---|---|
-| Model type | Decoder-only (GPT-style) | Standard for autoregressive LM / causal generation |
-| Normalization | Pre-LayerNorm | GPT-2 convention; more stable training than post-LN |
-| Positional encoding | RoPE (Rotary Position Embedding) | Current standard in modern LLMs (LLaMA, Mistral, etc.), applied at every attention layer |
-| Attention | Custom scaled dot-product multi-head attention | Written from scratch — Q/K/V projections, `-inf` masking pre-softmax, head split/merge |
-| Framework | PyTorch 2.13.0+cpu | No GPU available; CPU-only by design constraint |
-| Tokenization | Char-level (Stage 1) → BPE (Stage 2) | Progressive complexity — correctness first, then scale |
+| Component           | Choice                                         | Why                                                                                      |
+| ------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Model type          | Decoder-only (GPT-style)                       | Standard for autoregressive LM / causal generation                                       |
+| Normalization       | Pre-LayerNorm                                  | GPT-2 convention; more stable training than post-LN                                      |
+| Positional encoding | RoPE (Rotary Position Embedding)               | Current standard in modern LLMs (LLaMA, Mistral, etc.), applied at every attention layer |
+| Attention           | Custom scaled dot-product multi-head attention | Written from scratch — Q/K/V projections,`-inf` masking pre-softmax, head split/merge |
+| Framework           | PyTorch 2.13.0+cpu                             | No GPU available; CPU-only by design constraint                                          |
+| Tokenization        | Char-level (Stage 1) → BPE (Stage 2)          | Progressive complexity — correctness first, then scale                                  |
 
 **Explicitly not used:** `torch.nn.Transformer`, `torch.nn.MultiheadAttention`, any pretrained backbone.
 
@@ -36,12 +43,14 @@ Goals:
 ## Two-stage build plan
 
 ### Stage 1 — Correctness baseline (char-level)
+
 - Tiny dataset, character-level tokenizer, small model
 - Goal: prove the architecture is *correct*, not good
 - Sanity checks: overfit a single tiny batch to near-zero loss, no NaNs, monotonic loss decrease
 - This stage exists to catch bugs in attention/masking/RoPE before scaling up
 
 ### Stage 2 — Real training (BPE + TinyStories)
+
 - Dataset: [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) (roneneldan/TinyStories)
 - Byte-Pair Encoding tokenizer
 - Data loaded via `np.memmap` — full tokenized dataset is not loaded into RAM at once (required at 8GB RAM)
@@ -110,6 +119,7 @@ transformer-from-scratch/
 ## Debugging protocol (`BUGS.md`)
 
 This project follows a Socratic debugging protocol: before asking for outside help on a bug, 45 minutes of independent debugging is time-boxed, followed by a written bug report covering:
+
 - Expected behavior
 - Actual behavior
 - Causes ruled out so far
@@ -131,6 +141,7 @@ This project follows a Socratic debugging protocol: before asking for outside he
 🚧 Stage 0 — environment + planning. No model code written yet.
 
 Done so far:
+
 - `scripts/download_data.py` — pulls TinyStories via HF `datasets`, writes train/val JSONL
 - `exploration.ipynb` — build-order notes (tokenizer → embeddings/RoPE → single attention head → ...), no implementation
 
@@ -140,7 +151,7 @@ Not started: `model/`, `data/` tokenizers, `train.py`, `generate.py`, `rag/`, `e
 
 ## Reference (not copied from)
 
-[Karpathy's nanoGPT](https://github.com/karpathy/nanoGPT) is used as a correctness oracle to sanity-check architectural decisions — not as source code. All implementation here is original.
+[Karpathy&#39;s nanoGPT](https://github.com/karpathy/nanoGPT) is used as a correctness oracle to sanity-check architectural decisions — not as source code. All implementation here is original.
 
 ---
 
