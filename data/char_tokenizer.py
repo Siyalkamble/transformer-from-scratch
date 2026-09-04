@@ -1,7 +1,7 @@
 
 class CharTokenizer:
 
-    def __init__(self, text):
+    def __init__(self, text:str) -> None:
         vocab = sorted(list(set(text)))
         self.stoi = {ch: i for i, ch in enumerate(vocab)}
         self.itos = {i: ch for i, ch in enumerate(vocab)}
