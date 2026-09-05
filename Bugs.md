@@ -43,7 +43,7 @@ What you changed.
 
 **Fix:** Derive `batch` and `seq_len` from `x.shape` inside `forward()`, not from `__init__` args. Correct the shape comment to reflect what `.view()` alone produces, and add the explicit `.transpose(1, 2)` step (with its own correct comment) before QK^T.
 
-**Status:** Done
+**Status:** Fixed
 
 ## Bug: MultiHeadSelfAttention — .view() after .transpose() without .contiguous()
 
@@ -53,8 +53,19 @@ What you changed.
 
 **Actual behavior:** `out.transpose(1,2).view(-1, seq_len, self.d_model)` raises `RuntimeError: view size is not compatible with input tensor's size and stride` — `.transpose()` changes strides without moving memory, so the tensor is non-contiguous, and `.view()` requires contiguous memory to reinterpret shape.
 
-**Root cause:** Conflated "logically rearranged shape" with "physically rearranged memory." Already identified this correctly at the conceptual level in the Q9 shape-trace answer ("transpose back + contiguous().view()") but it didn't carry over into the actual implementation.
+**Root cause:** Conflated "logically rearranged shape" with "physically rearranged memory."
 
 **Fix:** Insert `.contiguous()` between `.transpose(1,2)` and `.view(...)`, or replace `.view()` with `.reshape()` (which contiguous-copies internally when needed).
+
+**Status:** Fixed.
+
+
+## Fix: MultiHeadSelfAttention — causal mask moved from forward() to registered buffer
+
+**Date:** 2026-09-05
+
+**Change:** Mask construction (`torch.triu(torch.ones(...), diagonal=1).bool()`) moved from inside `forward()` (rebuilt every call) to `__init__`, precomputed once at `max_seq_len` and stored via `self.register_buffer("causal_mask", mask)`. `forward()` now slices `self.causal_mask[:seq_len, :seq_len]` instead of reconstructing.
+
+**Reason:** Avoids repeated tensor allocation + triu computation on every forward pass across an entire training run — wasteful given CPU-only, 8GB RAM constraint. `register_buffer` also ensures the mask moves correctly with `.to(device)` and is included in `state_dict()`, unlike a bare tensor attribute.
 
 **Status:** Fixed.
