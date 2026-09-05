@@ -27,6 +27,8 @@ What you changed.
 **Why this matters / what it taught you:**
 1-2 sentences on the *general* lesson, not just this specific fix.
 
+
+
 ## Bug: MultiHeadSelfAttention — missing seq_len attribute, wrong instance-state design, mislabeled shape comment
 
 **Date:** 2026-09-05
@@ -45,6 +47,8 @@ What you changed.
 
 **Status:** Fixed
 
+
+
 ## Bug: MultiHeadSelfAttention — .view() after .transpose() without .contiguous()
 
 **Date:** 2026-09-05
@@ -60,7 +64,8 @@ What you changed.
 **Status:** Fixed.
 
 
-## Fix: MultiHeadSelfAttention — causal mask moved from forward() to registered buffer
+
+## Bug: MultiHeadSelfAttention — causal mask moved from forward() to registered buffer
 
 **Date:** 2026-09-05
 

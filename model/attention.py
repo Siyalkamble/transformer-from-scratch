@@ -15,9 +15,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.d_model = d_model
         self.n_heads = n_heads
         self.max_seq_len = max_seq_len
+        assert seq_len <= self.max_seq_len, f"seq_len must be less than max_seq_len = {self.max_seq_len}"
 
         self.head_dims = self.d_model // self.n_heads # 64 
-        assert (self.d_model % n_heads) == 0, "d_model must be divisible by n_heads"
+        assert (self.d_model % n_heads) == 0, f"{self.d_model} must be divisible by {self.n_heads}"
 
         self.scale = self.head_dims ** -0.5 # not by n_heads
 
@@ -29,7 +30,9 @@ class MultiHeadSelfAttention(nn.Module):
         mask = torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1).bool()
         self.register_buffer("causal_mask", mask)
 
-    def forward(self, x):
+        self.last_attention = None # for testing
+
+    def forward(self, x:torch.Tensor):
 
         seq_len = x.shape[1]
 
@@ -50,6 +53,7 @@ class MultiHeadSelfAttention(nn.Module):
         scores = scores.masked_fill(mask, float('-inf')) # (batch, n_heads, seq_len, seq_len) 
         
         attention = scores.softmax(dim = -1) # (batch, n_heads, seq_len, seq_len)
+        self.last_attention = attention
 
         out = attention @ V
         # attention: (batch, n_heads, seq_len, seq_len)
@@ -62,4 +66,5 @@ class MultiHeadSelfAttention(nn.Module):
         out_proj = self.Wo(concatenated) # (batch, seq_len, d_model) 
 
         return out_proj # (batch, seq_len, d_model)
+
 
