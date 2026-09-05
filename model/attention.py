@@ -41,7 +41,7 @@ class MultiHeadSelfAttention(nn.Module):
         attention = scores.softmax(dim=-1)
         out = attention @ V
 
-        concatenated  = out.transpose(1,2).contigious().view(-1, seq_len, self.d_model)
+        concatenated  = out.transpose(1,2).contiguous().view(-1, seq_len, self.d_model)
 
         out_proj = self.Wo(concatenated)
 
