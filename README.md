@@ -4,8 +4,6 @@ A decoder-only, GPT-style transformer language model implemented from scratch in
 
 This is not a "call a pretrained model" project. Every core component — attention, positional encoding, the training loop — is hand-implemented to demonstrate architecture-level understanding, not API fluency.
 
-
-
 ## Architecture
 
    ![Decoder attention pipeline](docs/decoder_attention_pipeline.svg)
@@ -134,6 +132,34 @@ This project follows a Socratic debugging protocol: before asking for outside he
 - No GPU — batch size, model size, and dataset loading are all constrained by this and documented as deliberate trade-offs, not oversights
 - `torch` installed via `--index-url https://download.pytorch.org/whl/cpu`
 
+## Local setup
+
+The repository uses a normal editable Python installation. This makes imports
+such as `from model.attention import MultiHeadSelfAttention` work from tests,
+notebooks, the VS Code terminal, and scripts launched from the repository.
+
+Run this once from the repository root:
+
+```bash
+source /home/siyal/mlenv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+In VS Code, select `/home/siyal/mlenv/bin/python` as the Python interpreter,
+then reload the window if it was open while the package was installed. Run
+tests from the repository root with:
+
+```bash
+python -m pytest
+```
+
+The editable install points Python at this working tree, so source changes are
+available immediately without reinstalling. Keep running commands from the
+repository root (or use the selected VS Code workspace); do not run test files
+directly with `python tests/test_causal_mask.py`.
+
 ---
 
 ## Status
@@ -146,14 +172,6 @@ Done so far:
 - `exploration.ipynb` — build-order notes (tokenizer → embeddings/RoPE → single attention head → ...), no implementation
 
 Not started: `model/`, `data/` tokenizers, `train.py`, `generate.py`, `rag/`, `eval/`, `BUGS.md`. The repo structure below is the target layout, not the current one — update this section as each piece lands, don't let it drift into aspirational fiction.
-
----
-
-## Reference (not copied from)
-
-[Karpathy&#39;s nanoGPT](https://github.com/karpathy/nanoGPT) is used as a correctness oracle to sanity-check architectural decisions — not as source code. All implementation here is original.
-
----
 
 ## Limitations (stated upfront, not discovered in an interview)
 
