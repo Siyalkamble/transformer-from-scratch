@@ -9,3 +9,5 @@ venv/
 .env
 .vscode/
 .agents/
+pyproject.toml
+docs/Rope_research_paper.pdf

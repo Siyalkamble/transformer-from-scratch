@@ -1,18 +1,18 @@
 '''
-1. Direct mask inspection. Forget the model for a second — can you assert something directly about self.causal_mask itself? What should mask[0, 0], mask[0, 5], and mask[5, 0] each be, and why? (Position 0 attending to position 5 — future — vs. position 5 attending to position 0 — past.)
+1. What should `self.causal_mask[0, 0]`, `self.causal_mask[0, 5]`, and `self.causal_mask[5, 0]` be, and why?
 
-2. Attention weights, not just mask values. After a real forward pass, attention (post-softmax) should have actual zeros in specific places. For query position i, what should be true about attention[..., i, j] for every j > i? This is testing the effect of the mask, not just its construction.
+2. After a real forward pass, what should be true about `attention[..., i, j]` for every `j > i` at query position `i`?
 
-3. The "does the future leak through gradients" test. This is the sharpest one and the one most people skip. If you change a future token's input embedding and rerun forward, should the output at an earlier position change at all? How would you actually check that with two forward passes and a comparison — not eyeballing, an assertion?
+3. If you change a future token’s input embedding and rerun forward, should the output at an earlier position change at all? How would you actually check that with two forward passes and an assertion (not just eyeballing)?
 
-4. Softmax sanity under masking. Each row of attention should still sum to 1 (softmax property preserved even with -inf masking, per the mechanism you already know: exp(-inf)=0). What's the assertion, and what tolerance do you need for floating point (torch.allclose, not ==)?
+4. Each row of attention should still sum to 1 even with masking. What’s the assertion for this, and what tolerance do you need for floating point (e.g., `torch.allclose`, not `==`)?
 
-5. Shape/no-NaN sanity. With -inf in the mix, is there any position where an entire row could end up all -inf (which would make softmax produce NaN)? Think about position 0 — how many valid (unmasked) keys does it have? Is that number ever zero? Worth asserting torch.isnan(attention).any() is False.
+5. With `-inf` in the mask, is there any position where an entire row could end up all `-inf` (which would make softmax produce NaN)? Specifically, think about position 0 — how many valid (unmasked) keys does it have, and is that ever zero? What assertion would you write to ensure `torch.isnan(attention).any()` is `False`?
 
-6. Different seq_len values. You built this to slice self.causal_mask[:seq_len, :seq_len] for variable-length input. Does it still work correctly at seq_len=1? At seq_len=max_seq_len? Edge cases like seq_len=1 are where slicing bugs hide.'''
-
+6. You built this to slice `self.causal_mask[:seq_len, :seq_len]` for variable-length input. Does it still work correctly at `seq_len = 1`? At `seq_len = max_seq_len`?'''
 
 # tests/test_causal_mask.py
+
 from model.attention import MultiHeadSelfAttention
 import torch
 import pytest

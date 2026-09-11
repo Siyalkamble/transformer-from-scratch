@@ -5,11 +5,10 @@ batch = 32
 seq_len = 64
 d_model = 256
 n_heads = 4
-max_seq_len = 512
 
 class MultiHeadSelfAttention(nn.Module):
 
-    def __init__(self, d_model:int ,n_heads: int, max_seq_len:int):
+    def __init__(self, d_model:int ,n_heads: int, max_seq_len:int = 512):
         super().__init__()
 
         self.d_model = d_model
