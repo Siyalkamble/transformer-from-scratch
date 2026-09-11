@@ -161,17 +161,23 @@ repository root (or use the selected VS Code workspace); do not run test files
 directly with `python tests/test_causal_mask.py`.
 
 ---
-
 ## Status
 
-🚧 Stage 0 — environment + planning. No model code written yet.
+🚧 Stage 1 — correctness baseline (char-level), in progress.
 
 Done so far:
-
 - `scripts/download_data.py` — pulls TinyStories via HF `datasets`, writes train/val JSONL
 - `exploration.ipynb` — build-order notes (tokenizer → embeddings/RoPE → single attention head → ...), no implementation
+- `model/attention.py` — `MultiHeadSelfAttention` fully implemented: Q/K/V projections, head split/merge with `.contiguous()`, causal mask via `register_buffer`, `seq_len > max_seq_len` guard, `self.last_attention` for test inspection
+- `tests/test_causal_mask.py` — 6 passing tests (mask structure, future-position zeroing, gradient/future-leak isolation, softmax row sums, no-NaN, seq_len edge cases) — **Stage 1 gate test, passing**
+- Shape-tracing exercise (Q1–Q9, attention forward pass) fully resolved, logged in `BUGS.md`
 
-Not started: `model/`, `data/` tokenizers, `train.py`, `generate.py`, `rag/`, `eval/`, `BUGS.md`. The repo structure below is the target layout, not the current one — update this section as each piece lands, don't let it drift into aspirational fiction.
+In progress:
+- `model/rope.py` — not yet written. Q/K currently have no positional signal. Blocking Stage 1 completion.
+
+Not started: `data/` tokenizers, `model/block.py`, `model/gpt.py`, `train.py`, `generate.py`, `ablations/`, `scaling/`, `rag/`, `eval/`, `DECISIONS.md`.
+
+**Stage 1 gate status:** causal-mask test passes ✅. RoPE integration into `attention.py`'s `forward()` is the remaining item before Stage 1 is fully closed and Stage 2 can start.
 
 ## Limitations (stated upfront, not discovered in an interview)
 
