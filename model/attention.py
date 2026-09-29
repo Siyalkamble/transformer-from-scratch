@@ -8,7 +8,11 @@ n_heads = 4
 
 class MultiHeadSelfAttention(nn.Module):
 
-    def __init__(self, d_model:int ,n_heads: int, max_seq_len:int = 512):
+    def __init__(self, d_model:int ,
+                 n_heads: int, 
+                 max_seq_len:int = 512
+        ):
+        
         super().__init__()
 
         self.d_model = d_model
@@ -21,12 +25,30 @@ class MultiHeadSelfAttention(nn.Module):
 
         self.scale = self.head_dims ** -0.5 # not by n_heads
 
-        self.Wq = nn.Linear(d_model, d_model, bias=False)
-        self.Wk = nn.Linear(d_model, d_model, bias=False)
-        self.Wv = nn.Linear(d_model, d_model, bias=False)
-        self.Wo = nn.Linear(d_model, d_model, bias=False)
+        self.Wq = nn.Linear(d_model,
+                             d_model,
+                             bias=False
+                    )
+        
+        self.Wk = nn.Linear(d_model, 
+                            d_model, 
+                            bias=False
+                    )
+        
+        self.Wv = nn.Linear(d_model, 
+                            d_model, 
+                            bias=False
+                    )
+        
+        self.Wo = nn.Linear(d_model, 
+                            d_model, 
+                            bias=False
+                    )
 
-        mask = torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1).bool()
+        mask = torch.triu(torch.ones(max_seq_len, 
+                                     max_seq_len), 
+                                     diagonal=1).bool()
+        
         self.register_buffer("causal_mask", mask)
 
         self.last_attention = None # for testing
@@ -40,9 +62,24 @@ class MultiHeadSelfAttention(nn.Module):
         V = self.Wv(x)
 
         # (batch, seq_len, d_model).view -> (batch, seq_len, n_heads, head_dims).T -> (batch, n_heads, seq_len, head_dims)
-        Q = Q.view(-1, seq_len, self.n_heads, self.head_dims).transpose(1,2) 
-        K = K.view(-1, seq_len, self.n_heads, self.head_dims).transpose(1,2)
-        V = V.view(-1, seq_len, self.n_heads, self.head_dims).transpose(1,2)
+        Q = Q.view(-1, 
+                   seq_len, 
+                   self.n_heads, 
+                   self.head_dims
+            ).transpose(1,2) 
+        
+        
+        K = K.view(-1, 
+                   seq_len, 
+                   self.n_heads, 
+                   self.head_dims
+            ).transpose(1,2)
+        
+        V = V.view(-1, 
+                   seq_len, 
+                   self.n_heads, 
+                   self.head_dims
+            ).transpose(1,2)
 
         # (batch, n_heads, seq_len, head_dims) @ (batch, n_heads, head_dims, seq_len).T -> (batch, n_heads, seq_len, seq_len)
         scores = Q @ K.transpose(-2, -1) * self.scale
