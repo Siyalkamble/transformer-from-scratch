@@ -28,49 +28,73 @@ What you changed.
 1-2 sentences on the *general* lesson, not just this specific fix.
 
 
+## MultiHeadSelfAttention (`attention.py`) — Bug Log
 
-## Bug: MultiHeadSelfAttention — missing seq_len attribute, wrong instance-state design, mislabeled shape comment
-
-**Date:** 2026-09-05
-
-**Expected behavior:** `forward(x)` should reshape Q/K/V from `(batch, seq_len, d_model)` into per-head form using shape values available at call time.
-
-**Actual behavior:**
-
-1. `forward()` references `self.seq_len`, which is never set in `__init__` — this raises `AttributeError` on first call.
-2. `self.batch` is set from a constructor argument and used inside `forward()` — will silently produce wrong reshapes (or crash) whenever the actual input batch size differs from what was passed at init (e.g. last batch of an epoch, inference with batch=1).
-3. Comment on the `.view()` call claims output shape is `(batch, n_heads, seq_len, head_dims)`, but `.view(batch, seq_len, n_heads, head_dims)` actually produces `(batch, seq_len, n_heads, head_dims)` — heads and seq_len are not transposed yet at this point.
-
-**Root cause:** Treated `batch` and `seq_len` as architectural constants (like `d_model`, `n_heads`) instead of recognizing them as properties of the input tensor `x`, which change per forward call. Also conflated "reshape into head-split view" with "reshape + transpose into per-head batched-matmul view" — same gap flagged during the Q3 shape-tracing exercise, resurfaced in actual code.
-
-**Fix:** Derive `batch` and `seq_len` from `x.shape` inside `forward()`, not from `__init__` args. Correct the shape comment to reflect what `.view()` alone produces, and add the explicit `.transpose(1, 2)` step (with its own correct comment) before QK^T.
-
-**Status:** Fixed
-
-
-
-## Bug: MultiHeadSelfAttention — .view() after .transpose() without .contiguous()
+### Bug 1 — Missing `seq_len` attribute, wrong instance-state design, mislabeled shape comment
 
 **Date:** 2026-09-05
+**Expected:** `forward(x)` reshapes Q/K/V from `(batch, seq_len, d_model)` into per-head form using shape values read at call time.
+**Actual:**
 
-**Expected behavior:** Head-merge step should reshape `(batch, n_heads, seq_len, head_dims)` back to `(batch, seq_len, d_model)` after attention output.
+1. `forward()` referenced `self.seq_len`, never set in `__init__` — raised `AttributeError` on first call.
+2. `self.batch` was set from a constructor argument and used inside `forward()` — would silently produce wrong reshapes (or crash) whenever the actual input batch size differed from what was passed at init (e.g. last batch of an epoch, inference with batch=1).
+3. The `.view()` comment claimed output shape `(batch, n_heads, seq_len, head_dims)`, but `.view(batch, seq_len, n_heads, head_dims)` actually produces `(batch, seq_len, n_heads, head_dims)` — heads and seq_len aren't transposed yet at that point.
+   **Cause:** Treated `batch` and `seq_len` as architectural constants (like `d_model`, `n_heads`) instead of recognizing them as properties of the input tensor `x` that change per forward call. Also conflated "reshape into head-split view" with "reshape + transpose into per-head batched-matmul view" — same gap flagged during the Q3 shape-tracing exercise, resurfaced in actual code.
+   **Fix:** Derive `batch` and `seq_len` from `x.shape` inside `forward()`, not from `__init__` args. Corrected the shape comment to reflect what `.view()` alone produces, and added an explicit `.transpose(1, 2)` step (with its own correct comment) before QK^T.
+   **Status:** Fixed.
 
-**Actual behavior:** `out.transpose(1,2).view(-1, seq_len, self.d_model)` raises `RuntimeError: view size is not compatible with input tensor's size and stride` — `.transpose()` changes strides without moving memory, so the tensor is non-contiguous, and `.view()` requires contiguous memory to reinterpret shape.
+### Bug 2 — `.view()` after `.transpose()` without `.contiguous()`
 
-**Root cause:** Conflated "logically rearranged shape" with "physically rearranged memory."
-
-**Fix:** Insert `.contiguous()` between `.transpose(1,2)` and `.view(...)`, or replace `.view()` with `.reshape()` (which contiguous-copies internally when needed).
-
+**Date:** 2026-09-05
+**Expected:** Head-merge step reshapes `(batch, n_heads, seq_len, head_dims)` back to `(batch, seq_len, d_model)` after attention output.
+**Actual:** `out.transpose(1,2).view(-1, seq_len, self.d_model)` raised `RuntimeError: view size is not compatible with input tensor's size and stride` — `.transpose()` changes strides without moving memory, so the tensor is non-contiguous, and `.view()` requires contiguous memory to reinterpret shape.
+**Cause:** Conflated "logically rearranged shape" with "physically rearranged memory."
+**Fix:** Inserted `.contiguous()` between `.transpose(1,2)` and `.view(...)`, or replace `.view()` with `.reshape()` (which contiguous-copies internally when needed).
 **Status:** Fixed.
 
-
-
-## Bug: MultiHeadSelfAttention — causal mask moved from forward() to registered buffer
+### Bug 3 — Causal mask rebuilt every `forward()` call instead of precomputed
 
 **Date:** 2026-09-05
-
-**Change:** Mask construction (`torch.triu(torch.ones(...), diagonal=1).bool()`) moved from inside `forward()` (rebuilt every call) to `__init__`, precomputed once at `max_seq_len` and stored via `self.register_buffer("causal_mask", mask)`. `forward()` now slices `self.causal_mask[:seq_len, :seq_len]` instead of reconstructing.
-
-**Reason:** Avoids repeated tensor allocation + triu computation on every forward pass across an entire training run — wasteful given CPU-only, 8GB RAM constraint. `register_buffer` also ensures the mask moves correctly with `.to(device)` and is included in `state_dict()`, unlike a bare tensor attribute.
-
+**Expected:** Causal mask construction happens once, not once per training step.
+**Actual:** `torch.triu(torch.ones(...), diagonal=1).bool()` was called inside `forward()`, rebuilding the full mask tensor on every single call — wasteful on CPU-only, 8GB RAM hardware across an entire training run.
+**Cause:** Didn't distinguish "depends only on `max_seq_len`, fixed at construction" from "depends on runtime input, must be computed per call" — same category of mistake as the RoPE cos/sin caching decision, just made the opposite way first.
+**Fix:** Moved mask construction to `__init__`, precomputed once at `max_seq_len`, stored via `self.register_buffer("causal_mask", mask)`. `forward()` now slices `self.causal_mask[:seq_len, :seq_len]` instead of reconstructing — also ensures the mask moves correctly with `.to(device)` and is included in `state_dict()`, unlike a bare tensor attribute.
 **Status:** Fixed.
+
+## RoPE (`rope.py`) — Bug Log
+
+### Bug 1 — Off-by-one in frequency exponent
+
+**Expected:** θ_i formula uses pair index `i` directly: `θ_i = base^(-2i/head_dims)`.
+**Actual:** First draft used `(i - 1)`, shifting the whole frequency table by one slot — pair 0 got the exponent meant for pair -1, and the last valid pair index was never reached.
+**Cause:** Misremembered the formula from the derivation notes; didn't cross-check against the written docstring before coding.
+**Fix:** Dropped the `-1`; exponent is `2*i`, using `i` as generated by `torch.arange(0, head_dims//2)`.
+
+### Bug 2 — Floor division instead of true division
+
+**Expected:** `θ_i = 1 / base^(2i/head_dims)` — the exponent is a fractional value.
+**Actual:** Used `//` (floor division) instead of `/` for `(2*i) // head_dims`. Since `2*i < head_dims` for every valid `i`, floor division always returned `0`, collapsing every frequency to `base^0 = 1` — RoPE would have silently done nothing.
+**Cause:** Didn't distinguish Python's `//` vs `/` operators carefully enough while translating the formula to code.
+**Fix:** Switched to `/` for true (float) division.
+
+### Bug 3 — dtype leak: float64 silently propagating through forward()
+
+**Expected:** `precomputes()` builds `cos`/`sin` buffers in `float32`, matching Q/K's dtype, so no implicit upcasting happens during rotation.
+**Actual:** `torch.arange(..., dtype=torch.float64)` was used for both `i` and `m` in `precomputes()`. This wasn't caught for several rounds — at one point I stated it was fixed when it hadn't actually been changed in the pasted code. Because `forward()` ends with `.type_as(q)`, the float64 arithmetic was silently masked: every rotation ran in double precision internally (extra memory, extra compute) with no error and no visibly wrong output.
+**Cause:** Confused "I intend to fix this" with "I have fixed this" — stated the fix out loud without verifying the actual pasted code reflected it. Root issue: no diff/re-check step between claiming a fix and moving to the next question.
+**Fix:** Changed both `dtype=torch.float64` → `dtype=torch.float32` in `precomputes()`.
+**Lesson:** Before saying "fixed," re-paste or re-read the actual current state of the file — don't trust memory of an intended edit.
+
+### Bug 4 — Reaching for `torch.arange` for the wrong operation (slicing pairs)
+
+**Expected:** Even/odd pair slicing on an *existing* tensor (`q`) uses Python step-slice indexing: `q[..., 0::2]`, `q[..., 1::2]`.
+**Actual:** First instinct was to use `torch.arange` to "slice into pairs" — `arange` generates a *new* index sequence, it doesn't index into data that already exists.
+**Cause:** Pattern-matched "I don't know the syntax → try the last tool I used (`arange`)" instead of naming the actual operation in English first ("pull out every other element of an existing tensor").
+**Fix:** Used slice-with-step notation directly on `q`/`k`'s last axis.
+
+### Bug 5 — Invalid `.view(-2, -1)` for broadcasting, wrong tool entirely
+
+**Expected:** Broadcasting `cos`/`sin` (shape `[T, head_dims/2]`) against `q1` (shape `[B, T, n_heads, head_dims/2]`) requires inserting new size-1 axes — no data reorganization.
+**Actual:** Attempted `.view(-2, -1)` — `-2` isn't valid PyTorch syntax (only `-1` has special meaning), and `view`/`reshape` reorganize existing elements rather than insert new dimensions, so it was the wrong tool even if the syntax had been valid.
+**Cause:** Reused an operation seen in `attention.py` without checking whether that spot was solving the same problem (it wasn't — dimension-insertion vs. actual reshaping are different operations that can look similar).
+**Fix:** Used `.unsqueeze(0).unsqueeze(2)` (equivalently, `[None, :, None, :]` indexing) to insert size-1 dims at the correct positions.
