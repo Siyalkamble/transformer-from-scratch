@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from model.rope import RotaryPositionEncoding
+
 batch = 32
 seq_len = 64
 d_model = 256
